@@ -11,7 +11,7 @@ python 3.8+
 
 ```console
 $ pip install -r requirements.txt
-$ python duroveswall/migrate.py
+$ python migrate.py
 $ python -m duroveswall
 ```
 
