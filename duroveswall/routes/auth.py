@@ -1,26 +1,39 @@
 from datetime import timedelta
+from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
+from fastapi.security import HTTPBasic, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
 from duroveswall.db import get_session
 from duroveswall.schemas import RegistrationForm, RegistrationSuccess
-from duroveswall.utils.user import register_user
-
+from duroveswall.utils.user import register_user, authenticate_user
 
 api_router = APIRouter(
     prefix="/user",
     tags=["User"],
 )
 
+security = HTTPBasic()
 
 @api_router.post(
     "/authentication",
     status_code=status.HTTP_200_OK)
-async def authentication():
-    # FIXME: your code here
-    pass
+
+async def authentication(
+    _: Request,
+    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    session: AsyncSession = Depends(get_session),
+):
+    user = await  authenticate_user(session, credentials.username, credentials.password)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect username or password",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
+    return True
 
 
 @api_router.post(

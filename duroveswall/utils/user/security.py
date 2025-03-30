@@ -1,5 +1,22 @@
-from duroveswall.config import get_settings
+from enum import verify
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from .database import get_user
+from duroveswall.config import get_settings
+from duroveswall.models import User
+
+async def authenticate_user(
+        session: AsyncSession,
+        username: str,
+        password: str
+) -> User | None:
+    user = await get_user(session, username)
+    if not user:
+        return None
+    if not verify_password(password, user.password):
+        return None
+    return  user
 
 def verify_password(
     plain_password: str,
