@@ -1,13 +1,19 @@
 from datetime import timedelta
+from os import access
 from typing import Annotated
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Request
-from fastapi.security import HTTPBasic, HTTPAuthorizationCredentials
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
+from starlette.responses import Response
 
 from duroveswall.db import get_session
 from duroveswall.schemas import RegistrationForm, RegistrationSuccess
+from duroveswall.schemas.auth.token import Token
+from duroveswall.utils.user import create_access_token, get_current_user, delete_user
+from duroveswall.models import User
+from duroveswall.schemas import User as UserSchema
 from duroveswall.utils.user import register_user, authenticate_user
 
 api_router = APIRouter(
@@ -15,26 +21,26 @@ api_router = APIRouter(
     tags=["User"],
 )
 
-security = HTTPBasic()
-
 @api_router.post(
     "/authentication",
-    status_code=status.HTTP_200_OK)
+    status_code=status.HTTP_200_OK,
+    response_model=Token
+)
 
 async def authentication(
     _: Request,
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(security)],
+    form_data: OAuth2PasswordRequestForm = Depends(),
     session: AsyncSession = Depends(get_session),
 ):
-    user = await  authenticate_user(session, credentials.username, credentials.password)
+    user = await  authenticate_user(session, form_data.username, form_data.password)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"}
         )
-    return True
-
+    access_token = create_access_token(data={"sub": user.username})
+    return {"access_token": access_token, "token_type": "bearer"}
 
 @api_router.post(
     "/registration",
@@ -61,15 +67,34 @@ async def registration(
 
 @api_router.get(
     "/me",
-    status_code=status.HTTP_200_OK)
-async def get_me():
-    # FIXME: your code here
-    pass
+    status_code=status.HTTP_200_OK,
+    response_model=UserSchema,
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "description": "Unauthorized",
+        },
+    },
+)
+async def get_me(
+    _: Request,
+    current_user: User = Depends(get_current_user),
+):
+    return UserSchema.model_validate(current_user)
 
 
 @api_router.delete(
     "/delete",
-    status_code=status.HTTP_204_NO_CONTENT)
-async def delete():
-    # FIXME: your code here
-    pass
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={
+        status.HTTP_401_UNAUTHORIZED: {
+            "description": "Unauthorized",
+        },
+    },
+)
+async def delete(
+    _: Request,
+    current_user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    await delete_user(session, current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
